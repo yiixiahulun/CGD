@@ -7,10 +7,11 @@ operate on JAX arrays and are designed to be composed and differentiated
 within the JAX ecosystem.
 """
 from typing import Any, cast
+from functools import partial
 
 import jax
 import jax.numpy as jnp
-from jax import jit, partial
+from jax import jit
 
 EPSILON = 1e-12
 

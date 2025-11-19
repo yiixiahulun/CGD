@@ -79,21 +79,18 @@ def _solve_cd_single_jax(
         )
         s_val = jnp.maximum(s_val, 1e-9)
 
-        def objective_1d(x: float) -> float:
-            p_vec = p_start.at[d_opt].set(x).at[d_comp].set(s_val - x)
-            return cast(
-                float,
-                potential_gaussian_jax(
-                    p_vec, sources_p_stim, sources_strength, alpha, radius, K
-                ),
-            )
-
-        grad_1d = grad(objective_1d)
-
-        def gd_step(_: int, x_current: float) -> jax.Array:
-            g: float = grad_1d(x_current)
+        def gd_step(_: int, x_current: float) -> float:
+            def objective_1d(x: float) -> float:
+                p_vec = p_start.at[d_opt].set(x).at[d_comp].set(s_val - x)
+                return cast(
+                    float,
+                    potential_gaussian_jax(
+                        p_vec, sources_p_stim, sources_strength, alpha, radius, K
+                    ),
+                )
+            g: float = grad(objective_1d)(x_current)
             x_next = x_current - learning_rate * g
-            return jnp.clip(x_next, 0, s_val)
+            return cast(float, jnp.clip(x_next, 0, s_val))
 
         final_x: float = jax.lax.fori_loop(0, cd_steps, gd_step, s_val / 2.0)
         p_res = p_start.at[d_opt].set(final_x).at[d_comp].set(s_val - final_x)
@@ -240,8 +237,7 @@ class EquilibriumFinderJax:
         n_jobs: int = -1,
         max_rounds: int = 50,
         cd_steps: int = 15,
-        learning_rate: float = 0.05,
-        **kwargs: Any,
+        learning_rate: float = 0.05
     ) -> List[NDArray[np.float64]]:
         """Finds all unique, stable equilibrium points using the JAX backend.
 
