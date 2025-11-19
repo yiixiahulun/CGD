@@ -11,7 +11,6 @@ import warnings
 from typing import List, Dict, Any, Tuple, Optional, Union, Literal
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
 
 # --- 导入我们库的所有核心组件 ---
 from ..core.source import GravitationalSource
@@ -19,7 +18,6 @@ from ..core.universe import Universe
 from ..measure import AlphaFitter, ProbeFitter
 # --- 核心修复：从 utils 导入我们需要的函数 ---
 from ..utils import create_source_map_from_data, process_counts_to_p_dict
-from ..visualize import FingerprintPlotter, LandscapePlotter, AtlasPlotter
 from ..geometry import distance_FR
 
 
@@ -141,6 +139,9 @@ def run_universe_analysis(
             print(f"  - 解 {i+2}: {np.round(p, 3)}")
     
     if plot and K == 3:
+        # --- 架构修复：将可视化导入移动到函数内部，避免顶层导入 ---
+        import matplotlib.pyplot as plt
+        from ..visualize import LandscapePlotter
         try:
             import ternary
             fig, ax = plt.subplots(1, 1, figsize=(7, 6))

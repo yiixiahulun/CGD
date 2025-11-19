@@ -22,16 +22,16 @@ dependencies = [
     "scipy",
     "joblib",
     "matplotlib",
-    "jax",
-    "jaxlib",
     "python-ternary",
 ]
 
 [project.optional-dependencies]
-dev = [
+test = [
     "pytest",
     "pytest-cov",
     "pytest-mock",
+    "jax[cpu]",
+    "jaxlib",
 ]
 
 [project.urls]
