@@ -1,6 +1,7 @@
 import jax
 import jax.numpy as jnp
-from jax import jit, partial
+from jax import jit
+from functools import partial
 
 EPSILON = 1e-12
 
