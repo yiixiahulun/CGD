@@ -25,6 +25,9 @@ def log_map_from_origin(p: np.ndarray) -> np.ndarray:
         np.ndarray: 一个位于效应空间 T_O 的向量 v。
     """
     p = np.asarray(p, dtype=float)
+    if not np.isclose(np.sum(p), 1.0) or np.any(p < 0):
+        raise ValueError("输入向量 p 必须是一个有效的概率分布 (和为1，无负值)。")
+
     K = len(p)
     origin = get_chaos_origin(K)
 
@@ -65,6 +68,9 @@ def exp_map_from_origin(v: np.ndarray) -> np.ndarray:
         np.ndarray: 沿测地线行进后的终点概率向量。
     """
     v = np.asarray(v, dtype=float)
+    if not np.isclose(np.sum(v), 0.0):
+        raise ValueError("输入向量 v 必须在切空间中 (和为0)。")
+
     K = len(v)
     origin = get_chaos_origin(K)
 
