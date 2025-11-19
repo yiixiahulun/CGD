@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cgd"
+version = "0.1.0"
+authors = [
+  { name="Author", email="author@example.com" },
+]
+description = "A scientific computing library for CGD."
+readme = "README.md"
+requires-python = ">=3.8"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "joblib",
+    "matplotlib",
+    "jax",
+    "jaxlib",
+    "python-ternary",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pytest-cov",
+    "pytest-mock",
+]
+
+[project.urls]
+Homepage = "https://github.com/example/cgd"
+Issues = "https://github.com/example/cgd/issues"
+
+[tool.setuptools]
+packages = ["cgd"]
+
+[tool.pytest.ini_options]
+markers = [
+    "core: marks tests as core functionality",
+    "validation: marks tests as validation and error handling",
+    "consistency: marks tests as checking for theoretical or backend consistency",
+    "performance: marks tests as performance benchmarks",
+]
