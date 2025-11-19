@@ -1,195 +1,258 @@
 # cgd/core/source.py
-"""
-cgd.core.source
+"""The GravitationalSource class, representing matter in a CGD universe.
 
-这个模块定义了 GravitationalSource 类。
-这个类封装了一个引力源的内在属性，并“知道”自己的理论层级
-('absolute' vs 'substitution') 和原始坐标系 ('labels')，
-以确保正确的科学使用和无歧义的维度变换。
+This module defines the GravitationalSource, an immutable dataclass that
+encapsulates the intrinsic properties of a source of "gravitational" potential.
+Crucially, it is "aware" of its own theoretical level ('absolute' vs.
+'substitution') and its native coordinate system ('labels') to ensure
+correct scientific usage and unambiguous dimensional transformations.
 """
-
 from __future__ import annotations
-from dataclasses import dataclass, field
-from typing import Literal, List, Tuple
-import numpy as np
-import warnings
 
-# --- 核心依赖：为了 embed 方法，我们需要导入核心几何工具 ---
+import warnings
+from dataclasses import dataclass, field
+from typing import List, Literal, Tuple, cast
+
+import numpy as np
+from numpy.typing import NDArray
+
 from ..geometry.transformations import exp_map_from_origin, log_map_from_origin
+
 
 @dataclass(frozen=True)
 class GravitationalSource:
-    """
-    一个封装了引力源内在属性、理论类型和坐标系标签的不可变数据类。
+    """An immutable representation of a source of potential in a CGD universe.
 
-    这是CGD宇宙中“物质”的数字化表示。每个源都由其“物理基因”(v_eigen)，
-    其所属的理论层级(v_type)，以及其被测量时所处的坐标系(labels)来完整定义。
+    This class is the digital representation of "matter" in a CGD simulation.
+    Each source is fully defined by its "physical DNA" (v_eigen), its
+    theoretical type (v_type), and the coordinate system in which it was
+    defined (labels).
 
     Attributes:
-        name (str): 
-            引力源的唯一名称。
-        v_eigen (np.ndarray): 
-            其本征效应向量，一个和为零的numpy数组。
-        v_type (Literal['absolute', 'substitution']):
-            v_eigen的理论类型，'absolute'拥有跨维度能力，'substitution'仅限同维度。
-        labels (Tuple[str, ...]):
-            一个包含原子事件标签的元组，定义了 v_eigen 各分量对应的坐标轴。
-            这是实现无歧义维度变换的基石。
-        strength (float): 
-            v_eigen的欧几里得模长 (||v_eigen||)，代表其绝对内在强度。
+        name (str): A unique identifier for the source.
+        v_eigen (NDArray[np.float64]): The source's "eigen-effect" vector. This is a
+            zero-sum vector in the tangent space of the probability simplex,
+            representing the direction and magnitude of the source's influence.
+        v_type (Literal['absolute', 'substitution']): The theoretical type of
+            the v_eigen vector.
+            - 'absolute': Represents a complete physical state or law. These
+              sources have a standalone meaning and can be meaningfully
+              projected into different dimensional spaces using the `embed`
+              method.
+            - 'substitution': Represents the difference between two 'absolute'
+              sources. These sources are only meaningful for comparisons within
+              their original dimensional space. They lack the theoretical basis
+              for cross-dimensional projection.
+        labels (Tuple[str, ...]): A tuple of strings defining the coordinate
+            axes for v_eigen. This labeling is fundamental for performing
+            unambiguous dimensional transformations.
+        strength (float): The Euclidean norm (||v_eigen||) of the eigen-effect
+            vector, representing the source's intrinsic strength. It is
+            computed automatically after initialization.
     """
+
     name: str
-    v_eigen: np.ndarray
-    v_type: Literal['absolute', 'substitution']
+    v_eigen: NDArray[np.float64]
+    v_type: Literal["absolute", "substitution"]
     labels: Tuple[str, ...]
     strength: float = field(init=False, repr=False)
 
-    def __post_init__(self):
-        """在初始化后自动计算 strength 属性并进行数据验证。"""
-        # 使用 object.__setattr__ 是因为 dataclass(frozen=True) 使实例不可变
-        object.__setattr__(self, 'strength', np.linalg.norm(self.v_eigen))
+    def __post_init__(self) -> None:
+        """Computes the strength attribute and validates the source's data."""
+        # Use object.__setattr__ because the dataclass is frozen
+        strength_val = np.linalg.norm(self.v_eigen)
+        object.__setattr__(self, "strength", strength_val)
 
-        # --- 数据验证增强 ---
-        if self.v_type not in ['absolute', 'substitution']:
-            raise ValueError(f"v_type 必须是 'absolute' 或 'substitution'，但收到了 '{self.v_type}'。")
-        
+        if self.v_type not in ["absolute", "substitution"]:
+            raise ValueError(
+                f"v_type must be 'absolute' or 'substitution', but got "
+                f"'{self.v_type}'."
+            )
+
         if len(self.v_eigen) != len(self.labels):
             raise ValueError(
-                f"引力源 '{self.name}' 的 v_eigen 维度 ({len(self.v_eigen)}) "
-                f"必须与其 labels 数量 ({len(self.labels)}) 相匹配。"
+                f"Source '{self.name}': v_eigen dimension ({len(self.v_eigen)})"
+                f" must match the number of labels ({len(self.labels)})."
             )
 
         if not np.isclose(np.sum(self.v_eigen), 0):
             raise ValueError(
-                f"引力源 '{self.name}' 的 v_eigen 分量之和必须接近于0 "
-                f"(当前和为 {np.sum(self.v_eigen):.2e})。"
+                f"Source '{self.name}': v_eigen components must sum to zero "
+                f"(current sum is {np.sum(self.v_eigen):.2e})."
             )
 
     def embed(self, new_labels: List[str]) -> GravitationalSource:
-        """
-        通过标签匹配，将当前引力源投影到一个新的维度空间中。
+        """Projects the source into a new dimensional space via label matching.
 
-        此方法采用基于“偏离模式守恒”的嵌入法，这是理论上最纯粹和
-        通用的方法，能够同时处理升维、降维和维度重排。
+        This method implements an embedding based on the principle of "conservation
+        of deviation pattern". It decodes the source's effect vector into a
+        probability distribution, reconstructs this pattern onto the new set of
+        labels, and then re-encodes the result into a new effect vector. This
+        approach is theoretically pure and general, handling up-projection,
+        down-projection, and reordering of dimensions simultaneously.
 
-        警告：此方法在理论上仅为 'absolute' 类型的 v_eigen 设计。
-        对 'substitution' 类型的 v_eigen 使用此方法会产生不可靠的结果。
+        Warning:
+            This method is theoretically designed only for 'absolute' type
+            sources. Applying it to 'substitution' type sources is
+            mathematically ill-defined and will produce unreliable results.
 
         Args:
-            new_labels (List[str]): 目标宇宙的原子事件标签列表。
+            new_labels (List[str]): The list of atomic event labels defining
+                the target dimensional space.
 
         Returns:
-            GravitationalSource: 一个新的、被投影到新维度空间的引力源对象。
+            GravitationalSource: A new source object projected into the target
+                dimensional space.
         """
         old_labels = list(self.labels)
-        
+
         if new_labels == old_labels:
             return self
 
-        if self.v_type == 'substitution':
+        if self.v_type == "substitution":
             warnings.warn(
-                f"警告：你正在对 'substitution' 类型的源 '{self.name}' 调用 embed()。"
-                "此操作理论上不严谨，结果可能非常不可靠。",
-                UserWarning
+                f"Warning: Calling .embed() on a 'substitution' type source "
+                f"'{self.name}'. This operation is not theoretically sound "
+                "and the results may be unreliable.",
+                UserWarning,
             )
 
-        # 步骤 1: 解码旧模式并与标签关联
+        # 1. Decode the old pattern and associate with labels
         p_old_dict = dict(zip(old_labels, exp_map_from_origin(self.v_eigen)))
 
-        # 步骤 2: 在新画布上重建概率分布
-        p_new_draft = np.zeros(len(new_labels))
+        # 2. Reconstruct the probability distribution on the new canvas
+        p_new_draft: NDArray[np.float64] = np.zeros(len(new_labels))
         for i, label in enumerate(new_labels):
             if label in p_old_dict:
                 p_new_draft[i] = p_old_dict[label]
-        
-        # 步骤 3: 重整化并编码新效应
+
+        # 3. Renormalize and encode the new effect
         sum_draft = np.sum(p_new_draft)
+        v_embedded: NDArray[np.float64]
         if sum_draft < 1e-12:
             warnings.warn(
-                f"在 embed 操作中，源 '{self.name}' 的旧标签 {old_labels} 与新标签 "
-                f"{new_labels} 之间没有任何重叠。将返回一个零效应源。"
+                f"During embed for source '{self.name}', no overlap was found "
+                f"between old labels {old_labels} and new labels "
+                f"{new_labels}. Returning a zero-effect source."
             )
             v_embedded = np.zeros(len(new_labels))
         else:
-            p_new_normalized = p_new_draft / sum_draft
+            p_new_normalized: NDArray[np.float64] = p_new_draft / sum_draft
             v_embedded = log_map_from_origin(p_new_normalized)
-        
+
         return GravitationalSource(
-            name=self.name, 
-            v_eigen=v_embedded, 
-            v_type=self.v_type, 
-            labels=tuple(new_labels)
+            name=self.name,
+            v_eigen=v_embedded,
+            v_type=self.v_type,
+            labels=tuple(new_labels),
         )
 
-    def to_substitution(self, reference_source: GravitationalSource) -> GravitationalSource:
+    def to_substitution(
+        self, reference_source: GravitationalSource
+    ) -> GravitationalSource:
+        """Converts an 'absolute' source to a 'substitution' source.
+
+        This is done by subtracting a 'reference' absolute source. The resulting
+        source represents the effect of substituting the reference with this
+        source.
+
+        Args:
+            reference_source (GravitationalSource): Another 'absolute' source
+                that serves as the baseline for comparison. It must share the
+                same labels as the current source.
+
+        Returns:
+            GravitationalSource: A new 'substitution' type source representing
+                the difference between the two absolute sources.
+
+        Raises:
+            TypeError: If either this source or the reference source is not
+                of type 'absolute'.
+            ValueError: If the labels of the two sources do not match.
         """
-        将一个 'absolute' 源转换为相对于另一个 'absolute' 源的 'substitution' 源。
-        """
-        if self.v_type != 'absolute' or reference_source.v_type != 'absolute':
-            raise TypeError("to_substitution 方法只能用于两个 'absolute' 类型的源相减。")
+        if self.v_type != "absolute" or reference_source.v_type != "absolute":
+            raise TypeError(
+                "The .to_substitution() method can only be used to subtract "
+                "two 'absolute' type sources."
+            )
         if self.labels != reference_source.labels:
-            raise ValueError("源和参照物的标签坐标系必须完全相同。")
-            
+            raise ValueError("Source and reference must have the exact same labels.")
+
         v_sub = self.v_eigen - reference_source.v_eigen
         new_name = f"{self.name}_vs_{reference_source.name}"
-        
+
         return GravitationalSource(
-            name=new_name, 
-            v_eigen=v_sub, 
-            v_type='substitution', 
-            labels=self.labels
+            name=new_name, v_eigen=v_sub, v_type="substitution", labels=self.labels
         )
 
     def __repr__(self) -> str:
-        # 截断标签列表以避免过长的输出
-        labels_repr = self.labels[:3]
+        """Provides a concise string representation of the source."""
+        # Truncate label list for cleaner output
+        labels_repr: List[str] = list(self.labels[:3])
         if len(self.labels) > 3:
-            labels_repr = list(labels_repr) + ['...']
+            labels_repr = labels_repr + ["..."]
 
-        return (f"GravitationalSource(name='{self.name}', type='{self.v_type}', "
-                f"K={len(self.v_eigen)}, strength={self.strength:.4f}, labels={labels_repr})")
+        return (
+            f"GravitationalSource(name='{self.name}', type='{self.v_type}', "
+            f"K={len(self.v_eigen)}, strength={self.strength:.4f}, "
+            f"labels={labels_repr})"
+        )
 
     def __add__(self, other: GravitationalSource) -> GravitationalSource:
-        """重载加法运算符，用于效应的线性叠加。"""
+        """Overloads the addition operator for linear superposition of effects."""
         if self.labels != other.labels:
-            raise ValueError("只有在相同标签坐标系下的引力源才能相加。")
-        
-        new_v_type = 'substitution' if 'substitution' in (self.v_type, other.v_type) else 'absolute'
+            raise ValueError("Sources can only be added if they share the same labels.")
+
+        # The sum is a substitution if either operand is one
+        new_v_type: Literal["absolute", "substitution"] = (
+            "substitution"
+            if "substitution" in (self.v_type, other.v_type)
+            else "absolute"
+        )
         new_v_eigen = self.v_eigen + other.v_eigen
         new_name = f"({self.name})+({other.name})"
-        
+
         return GravitationalSource(
             name=new_name, v_eigen=new_v_eigen, v_type=new_v_type, labels=self.labels
         )
 
     def __sub__(self, other: GravitationalSource) -> GravitationalSource:
-        """重载减法运算符，主要用于计算替换效应。"""
+        """Overloads the subtraction operator, primarily for substitution."""
         if self.labels != other.labels:
-            raise ValueError("只有在相同标签坐标系下的引力源才能相减。")
-        
-        if self.v_type == 'absolute' and other.v_type == 'absolute':
+            raise ValueError(
+                "Sources can only be subtracted if they share the same labels."
+            )
+
+        if self.v_type == "absolute" and other.v_type == "absolute":
+            # This is the primary use case: creating a substitution effect
             return self.to_substitution(other)
-        
+
         if self.v_type == other.v_type:
+            # Subtraction of two substitution sources is also allowed
             new_v_eigen = self.v_eigen - other.v_eigen
             new_name = f"({self.name})-({other.name})"
             return GravitationalSource(
-                name=new_name, v_eigen=new_v_eigen, v_type=self.v_type, labels=self.labels
+                name=new_name,
+                v_eigen=new_v_eigen,
+                v_type=self.v_type,
+                labels=self.labels,
             )
         else:
             raise TypeError(
-                f"不同类型的 v_eigen ('{self.v_type}' 和 '{other.v_type}') 不能直接相减。"
-                "如果意图是计算替换效应，请确保两者都是 'absolute' 类型。"
+                f"Direct subtraction between different v_types ('{self.v_type}'"
+                f" and '{other.v_type}') is not permitted. If the intent is to "
+                "calculate a substitution effect, ensure both sources are of "
+                "'absolute' type."
             )
 
     def __mul__(self, scalar: float) -> GravitationalSource:
-        """重载乘法运算符，用于缩放效应强度。"""
+        """Overloads the multiplication operator for scaling the effect."""
         if not isinstance(scalar, (int, float)):
-            raise TypeError("引力源只能与标量相乘。")
-            
-        new_v_eigen = self.v_eigen * scalar
+            raise TypeError("A GravitationalSource can only be multiplied by a scalar.")
+
+        new_v_eigen: NDArray[np.float64] = self.v_eigen * scalar
         new_name = f"{self.name}*{scalar:.2f}"
-        
+
         return GravitationalSource(
             name=new_name, v_eigen=new_v_eigen, v_type=self.v_type, labels=self.labels
         )

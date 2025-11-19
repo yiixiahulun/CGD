@@ -6,13 +6,15 @@ cgd.measure.purification
 这是连接实验观测和CGD理论实体的核心接口。
 """
 
-from typing import Literal, List
+from typing import List, Literal
+
 import numpy as np
+
+# 从核心对象模块导入 GravitationalSource，以便我们可以创建它
+from ..core.source import GravitationalSource
 
 # 从我们的几何工具箱中导入核心映射工具
 from ..geometry.transformations import log_map_from_origin
-# 从核心对象模块导入 GravitationalSource，以便我们可以创建它
-from ..core.source import GravitationalSource
 
 
 def measure_source(
@@ -20,7 +22,7 @@ def measure_source(
     p_total: np.ndarray,
     p_stage: np.ndarray,
     event_labels: List[str],
-    measurement_type: Literal['absolute', 'substitution'] = 'substitution'
+    measurement_type: Literal["absolute", "substitution"] = "substitution",
 ) -> GravitationalSource:
     """
     通过几何净化，从实验数据中测量一个引力源，并返回一个完整的对象。
@@ -30,21 +32,21 @@ def measure_source(
     信息完备的 GravitationalSource 对象。
 
     Args:
-        name (str): 
+        name (str):
             要创建的引力源的名称 (e.g., "Banana_Scent", "Drug_X_vs_Vehicle")。
-        p_total (np.ndarray): 
+        p_total (np.ndarray):
             在“单源净化实验”中观测到的总效应概率分布。
-        p_stage (np.ndarray): 
+        p_stage (np.ndarray):
             在“情景校准实验”中观测到的舞台基线概率分布。
         event_labels (List[str]):
             一个包含原子事件标签的列表，用于定义本次测量的坐标系。
             其长度必须与 p_total 和 p_stage 的维度相匹配。
-        measurement_type (Literal['absolute', 'substitution'], optional): 
+        measurement_type (Literal['absolute', 'substitution'], optional):
             指定本次测量的理论类型。默认为 'substitution'，对应于
             绝大多数标准对比实验的场景。
 
     Returns:
-        GravitationalSource: 
+        GravitationalSource:
             一个封装了测量结果的、信息完备的引力源对象。
     """
     K = len(event_labels)
@@ -61,13 +63,10 @@ def measure_source(
 
     # 2. 后台效应分离
     v_eigen = v_total - v_stage
-    
+
     # 3. 构建并返回一个完整的、带有“记忆”的物理对象
     return GravitationalSource(
-        name=name, 
-        v_eigen=v_eigen, 
-        v_type=measurement_type,
-        labels=tuple(event_labels)
+        name=name, v_eigen=v_eigen, v_type=measurement_type, labels=tuple(event_labels)
     )
 
 
@@ -84,15 +83,16 @@ def geometric_purification(p_total: np.ndarray, p_stage: np.ndarray) -> np.ndarr
         np.ndarray: 被测量出的 v_eigen (裸数组)。
     """
     import warnings
+
     warnings.warn(
         "`geometric_purification` 已被 `measure_source` 取代。"
         "新函数会返回一个信息完备的 GravitationalSource 对象，更加安全。",
         DeprecationWarning,
-        stacklevel=2
+        stacklevel=2,
     )
     if len(p_total) != len(p_stage):
         raise ValueError("p_total 和 p_stage 的维度必须相同。")
-        
+
     v_total = log_map_from_origin(p_total)
     v_stage = log_map_from_origin(p_stage)
     return v_total - v_stage
