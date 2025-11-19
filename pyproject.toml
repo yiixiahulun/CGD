@@ -1,0 +1,14 @@
+[tool.mypy]
+ignore_missing_imports = true
+
+[tool.isort]
+profile = "black"
+
+[tool.black]
+line-length = 88
+
+[tool.pytest.ini_options]
+testpaths = [
+    "tests",
+]
+addopts = "-v"
