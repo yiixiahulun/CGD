@@ -1,128 +1,21 @@
-# STEP 6: Test Execution Log
+# Test Execution Log
 
-## Module: `tests/core`
+This log documents the output of running the corrected test suite against the original, unmodified source code. The failures observed below confirm that the test suite is now accurately identifying the known bugs in the codebase.
 
-**Execution Timestamp**: 2025-11-19 08:07:59 UTC
-
-**Outcome**: All tests passed successfully after initial debugging of the test code and environment.
-
-### Summary:
-(Summary from core module remains unchanged)
-
----
-
-### Final Pytest Output:
-```
-(Output from core tests remains unchanged)
-```
----
-
-## Module: `tests/geometry` (JAX Backend Verification)
-
-**Execution Timestamp**: 2025-11-19 09:39:56 UTC
-
-**Outcome**: All `pytest` tests for `simplex.py` and `transformations.py` passed. The JAX backend consistency tests were **disabled** in `pytest` due to an intractable environment issue, but consistency was **successfully verified** using a standalone, reproducible script.
-
-### Summary of JAX Verification:
-
-A persistent and un-debuggable environment issue prevents `pytest` from collecting tests that import JAX, causing all backend consistency tests to be skipped. All logical debugging paths, including architectural fixes, were exhausted.
-
-To provide definitive and reproducible proof of backend consistency, a standalone script was created and is included below. This script bypasses `pytest` and directly compares the NumPy and JAX geometry functions. **The script ran successfully and confirms that all geometry backends are numerically consistent** within the specified tolerance (`atol=1e-6`).
-
-The `pytest` tests in `test_backend_consistency.py` have been explicitly marked with `@pytest.mark.skip` to prevent false confidence from a "passing" (but skipped) test suite. This is a pragmatic solution to an environmental anomaly.
-
----
-
-### Standalone Verification Script (`standalone_consistency_check.py`)
-
-```python
-# standalone_consistency_check.py
-"""
-A standalone script to verify the numerical consistency of the NumPy and JAX
-geometry backends, bypassing the pytest runner.
-"""
-import numpy as np
-
-def run_check():
-    """Runs the consistency checks."""
-    print("--- Standalone Backend Consistency Check ---")
-
-    try:
-        # Import NumPy versions
-        from cgd.geometry import simplex as simplex_np
-        from cgd.geometry import transformations as trans_np
-
-        # Import JAX versions
-        import jax
-        import jax.numpy as jnp
-        from cgd.geometry import _jax_impl as jax_impl
-        print("SUCCESS: JAX and all source modules imported successfully.")
-    except ImportError as e:
-        print(f"FAILURE: Could not import necessary modules. Error: {e}")
-        return
-
-    # --- Test Data ---
-    P_VECTORS = [
-        np.array([1.0]), np.array([0.5, 0.5]), np.array([1.0, 0.0]),
-        np.array([1/3, 1/3, 1/3]), np.array([1.0, 0.0, 0.0]),
-        np.array([0.5, 0.5, 0.0]), np.array([0.8, 0.1, 0.1]),
-        np.array([0.25, 0.25, 0.25, 0.25]), np.array([0.4, 0.3, 0.2, 0.1]),
-    ]
-    V_VECTORS = [
-        np.array([0.0]), np.array([0.0, 0.0]), np.array([0.5, -0.5]),
-        np.array([0.0, 0.0, 0.0]), np.array([0.6, -0.3, -0.3]),
-        np.array([0.0, 0.0, 0.0, 0.0]), np.array([0.3, -0.1, -0.1, -0.1]),
-    ]
-    TOLERANCE = 1e-6
-    failures = []
-
-    # --- 1. Test distance_FR ---
-    print("\nChecking distance_FR consistency...")
-    for i, p1_np in enumerate(P_VECTORS):
-        for j, p2_np in enumerate(P_VECTORS):
-            if p1_np.shape != p2_np.shape: continue
-            dist_np = simplex_np.distance_FR(p1_np, p2_np)
-            dist_jax = jax_impl.distance_FR_jax(jnp.array(p1_np), jnp.array(p2_np))
-            if not np.isclose(dist_np, dist_jax, atol=TOLERANCE):
-                failures.append(f"distance_FR failed for p_vectors {i} and {j}")
-
-    # --- 2. Test log_map_from_origin ---
-    print("Checking log_map_from_origin consistency...")
-    for i, p_np in enumerate(P_VECTORS):
-        v_np = trans_np.log_map_from_origin(p_np)
-        v_jax = jax_impl.log_map_from_origin_jax(jnp.array(p_np))
-        try: np.testing.assert_allclose(v_np, v_jax, atol=TOLERANCE)
-        except AssertionError: failures.append(f"log_map failed for p_vector {i}")
-
-    # --- 3. Test exp_map_from_origin ---
-    print("Checking exp_map_from_origin consistency...")
-    for i, v_np in enumerate(V_VECTORS):
-        p_np = trans_np.exp_map_from_origin(v_np)
-        p_jax = jax_impl.exp_map_from_origin_jax(jnp.array(v_np))
-        try: np.testing.assert_allclose(p_np, p_jax, atol=TOLERANCE)
-        except AssertionError: failures.append(f"exp_map failed for v_vector {i}")
-
-    # --- Final Report ---
-    print("\n--- FINAL REPORT ---")
-    if not failures: print("✅ SUCCESS: All NumPy and JAX geometry backends are numerically consistent.")
-    else:
-        print(f"❌ FAILURE: Found {len(failures)} inconsistencies:")
-        for f in failures: print(f"  - {f}")
-
-if __name__ == "__main__":
-    run_check()
-```
-
-### Final Script Output:
+## Pytest Output
 
 ```
---- Standalone Backend Consistency Check ---
-SUCCESS: JAX and all source modules imported successfully.
-
-Checking distance_FR consistency...
-Checking log_map_from_origin consistency...
-Checking exp_map_from_origin consistency...
-
---- FINAL REPORT ---
-✅ SUCCESS: All NumPy and JAX geometry backends are numerically consistent.
+tests/test_numpy.py::test_uniqueness_logic FAILED
+tests/test_jax.py::test_hessian_validation FAILED
+tests/test_consistency.py::test_gradient_consistency FAILED
+tests/test_consistency.py::test_solver_showdown FAILED
 ```
+
+## Summary of Failures
+
+*   **`test_uniqueness_logic` (NumPy):** This test failed as expected, confirming the bug in the NumPy implementation where the uniqueness check for sources is flawed.
+*   **`test_hessian_validation` (JAX):** This test failed as expected, demonstrating that the JAX implementation does not properly validate the Hessian matrix, leading to incorrect optimization results.
+*   **`test_gradient_consistency` (Consistency):** This test failed, highlighting the mathematical inconsistency between the gradient calculations in the NumPy and JAX backends.
+*   **`test_solver_showdown` (Consistency):** This test failed, showing that the two solvers produce different results, which is a direct consequence of the gradient inconsistency.
+
+The test suite is now a reliable tool for diagnosing the issues in the codebase.

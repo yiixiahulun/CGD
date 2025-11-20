@@ -11,7 +11,6 @@ import warnings
 from typing import List, Dict, Any, Tuple, Optional, Union, Literal
 import numpy as np
 import pandas as pd
-
 # --- 导入我们库的所有核心组件 ---
 from ..core.source import GravitationalSource
 from ..core.universe import Universe
@@ -139,7 +138,6 @@ def run_universe_analysis(
             print(f"  - 解 {i+2}: {np.round(p, 3)}")
     
     if plot and K == 3:
-        # --- 架构修复：将可视化导入移动到函数内部，避免顶层导入 ---
         import matplotlib.pyplot as plt
         from ..visualize import LandscapePlotter
         try:
